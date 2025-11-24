@@ -29,7 +29,7 @@ Room
 --when room is created put it inside a file 
 
 --We can now display all of the files room without pb 
---need to add the room door position input => 2 == door
+--add the room door position input => 2 == door
 
 ----------------------------------------------------------
 Machine 
@@ -41,12 +41,20 @@ Machine
     - register machine struc -- create new File by room  
     - auto maintenance status = 0 (None) - user need to enter 
 
-    -  next -> register the created machine struct into it's room file 
+    -  register the created machine struct into it's room file 
+        - create room file // in factory init - del file if (0)
+
+----------------------------------------------------------
+Left to do : 
+Mark/unmark machines as under maintenance - add menu option
+display all machines underMaintenance (organized by room) - add menu option
+remove machines - change id creation  -- need public variable to auto_increment - to avoid double ID - add menu option
+
+--> Separate project in multiple file (use of header) - ask teacher 
+
 
 */
 //STRUCT================================================================================
-
-enum State {UnderMaintenance = 1, None = 0};
 
 struct Machine {
     int machineId;
@@ -55,19 +63,21 @@ struct Machine {
     int Maintenance; 
 }; 
 
-int nMachine;
+int nMachine; 
 
 
 //SKULL FUNCTIONS================================================================================
 void checkExistingF(FILE **fptr);
+void SupprRoomFiles();
+int numberOfRooms();
+void display(int m, int n, int **ptr1); //common to every file
 
 void createRoom();
 void matrixSize(int *rows, int *cols);
-void matrixCreation(int m,int n, int ***ptr1);
+void matrixCreation(int m,int n, int ***ptr1); // common to machine and room files
 void doorInput(int m, int n, int **ptr1);
-void display(int m, int n, int **ptr1);
 void updateFile(int m, int n, int **ptr1);
-void freedom(int m, int **ptr1);
+void freedom(int m, int **ptr1); // common to machine and room files
 
 void displayFile(FILE *fptr);
 
@@ -75,13 +85,14 @@ void displayROOM(int roomNum);
 
 void createMachine();
 int** getRoomInfo(int roomNum, int *rows, int *cols);
-void NewMachineInfo(int m,int n, int **CurrRoomMatrix);
+void NewMachineInfo(int m,int n, int **CurrRoomMatrix, int roomNum);
 void MachinePos(int m, int n, int **ptr1, int* inputRow, int* inputCol);
 int doorToMach(int doorM, int doorN, int col, int row, int m, int n, int**ptr);
 int nextPt(int testm, int testn, int m, int n, int ptm, int ptn, int** ptr);
 int border (int ptm, int ptn, int m, int n, int** ptr);
 int checkMach(int testm, int testn, int m, int n, int ptm, int ptn);
 void cleanMatrix(int m, int n, int**ptr);
+void updateMatrix(int roomNum,int **CurrRoomMatrix);
 
 
 //FUNCTIONS================================================================================
@@ -159,9 +170,11 @@ void checkExistingF(FILE **fptr) //CREATE OR UPDATE FACTORY
 
     if (redo == 0)
     {   
+        // SUPPR THE FILE - But first read it to know number of rooms and suppr room files 
+        SupprRoomFiles();
         if ((*fptr = fopen("factory.bin", "wb"))== NULL)
         {printf("Error - verify file path or permissions \n");}
-        else {fclose(*fptr);}
+        else {fclose(*fptr);} 
         printf("\n");
         printf("=====FACTORY CREATION=====\n");
     }
@@ -170,6 +183,39 @@ void checkExistingF(FILE **fptr) //CREATE OR UPDATE FACTORY
         printf("\n");
         printf("=====FACTORY UPDATING=====\n");
     }
+}
+
+void SupprRoomFiles(){
+    int NbrOfRoom = numberOfRooms();
+    char fileName[50];
+    //printf("number of rooms %d\n", NbrOfRoom); - test
+
+    for (int i = 1; i <=NbrOfRoom; i++){
+        //ERASE LOCAL ROOM MACHINE FILE 
+        sprintf(fileName, "room%d.bin", i); // using + doesn't work in C ...
+        //printf("%s\n", fileName); - test
+        remove(fileName);
+    }
+}
+
+int numberOfRooms(){
+    //method - counting  the number of room - up to the number - then getting that one 
+    FILE *fptr;
+    int m, n; // read them for each room
+    int current = 0;
+
+    if ((fptr = fopen("factory.bin", "rb")) == NULL){
+    printf("No existing file detected or path not working\n");
+    return -1;}
+        
+    // Loop through all stored rooms
+    while (fread(&m, sizeof(int), 1, fptr) == 1 &&
+        fread(&n, sizeof(int), 1, fptr) == 1)
+    {
+        fseek(fptr, (long)m * n * sizeof(int), SEEK_CUR); // skip matrix
+        current +=1;
+    }
+    return current; 
 }
 
 //CREATE ROOM ========================================================================================================================
@@ -380,8 +426,13 @@ void createMachine(){
     display(m,n,CurrRoomMatrix); 
 
     //Machine Info 
-    NewMachineInfo(m,n, CurrRoomMatrix);
+    NewMachineInfo(m,n, CurrRoomMatrix,roomNum);
 
+    //verify matrix 
+    display(m,n,CurrRoomMatrix); 
+
+    //update matrix in factory file
+    updateMatrix(roomNum, CurrRoomMatrix);
 }
 
 int** getRoomInfo(int roomNum, int *rows, int *cols){
@@ -391,46 +442,53 @@ int** getRoomInfo(int roomNum, int *rows, int *cols){
     int current = 1;
     int found = 0; 
 
-    if ((fptr = fopen("factory.bin", "rb")) == NULL){
+    while (!found){
+
+        if ((fptr = fopen("factory.bin", "rb")) == NULL){
         printf("No existing file detected or path not working\n");
-        return NULL;
-    }
-
-    // Loop through all stored rooms
-    while (fread(&m, sizeof(int), 1, fptr) == 1 &&
-           fread(&n, sizeof(int), 1, fptr) == 1)
-    {
-
-        //bug catching prints-----
-        //printf("current room num %d\n",current);
-        //printf("m %d et n %d \n",m, n);
+        return NULL;}
         
-        if (current == roomNum)
+        // Loop through all stored rooms
+        while (fread(&m, sizeof(int), 1, fptr) == 1 &&
+            fread(&n, sizeof(int), 1, fptr) == 1)
         {
-            printf("\n--- ROOM %d (Size %dx%d) ---\n", roomNum, m, n);
 
-            // //buffer of right type 
-            int **buffer;
-            matrixCreation(m, n, &buffer);
+            //bug catching prints-----
+            printf("room num %d\n",roomNum);
+            printf("current room num %d\n",current);
+            //printf("m %d et n %d \n",m, n);
+            
+            if (current == roomNum)
+            {
+                printf("\n--- ROOM %d (Size %dx%d) ---\n", roomNum, m, n);
 
-            for (int i = 0; i < m; i++)
-                fread(buffer[i], sizeof(int), n, fptr);
+                // //buffer of right type 
+                int **buffer;
+                matrixCreation(m, n, &buffer);
 
-            found=1;
-            fclose(fptr);
+                for (int i = 0; i < m; i++)
+                    fread(buffer[i], sizeof(int), n, fptr);
 
-            //return the needed info for the machine
-            *rows = m;
-            *cols = n;
-            return buffer; 
+                found=1;
+                fclose(fptr);
+
+                //return the needed info for the machine
+                *rows = m;
+                *cols = n;
+                return buffer; 
+            }
+            else {fseek(fptr, sizeof(int) * m * n, SEEK_CUR);} //skip to realign the bytes
+            current +=1;
         }
-        else {fseek(fptr, sizeof(int) * m * n, SEEK_CUR);} //skip to realign the bytes
-        current +=1;
+
+        printf("\nRoom Number not found\n");
+        printf("Enter factory room number : "); 
+        scanf("%d", &roomNum);
+        current = 1;
     }
-    if (found ==0) {printf("\nRoom Number not found\n");}
 }
 
-void NewMachineInfo(int m,int n, int **CurrRoomMatrix){
+void NewMachineInfo(int m,int n, int **CurrRoomMatrix, int roomNum){
     int TotalMachine=0; 
     struct Machine currentMachine;
 
@@ -450,17 +508,24 @@ void NewMachineInfo(int m,int n, int **CurrRoomMatrix){
     MachinePos(m, n, CurrRoomMatrix, &inputRow, &inputCol);
     currentMachine.Row =inputRow;
     currentMachine.Col =inputCol;
-
-    /*
-    //Test
-    printf("currentMachine.Row %d\n",currentMachine.Row );
-    printf("currentMachine.Col %d\n",currentMachine.Col );
-    */
-    display(m,n,CurrRoomMatrix);
-
+    
     //MAINTENANCE -----------------------------------------------------------------
     //zero by default 
     currentMachine.Maintenance =0;
+
+    //UPDATE LOCAL ROOM MACHINE FILE 
+    FILE *fptrRoom;
+    //updating file
+    char fileName[50];
+    sprintf(fileName, "room%d.bin", roomNum); // using + doesn't work in C ...
+
+    if ((fptrRoom = fopen(fileName, "ab"))== NULL)
+    {printf("Error - verify file path or permissions \n");
+    return;}
+
+    fwrite(&currentMachine, sizeof(currentMachine), 1, fptrRoom);
+
+    fclose(fptrRoom);
 }
 
     //Position cdt check --------------------------------
@@ -491,7 +556,7 @@ void MachinePos(int m, int n, int **ptr1, int* inputRow, int* inputCol){
 
         //FIRST CDT ==================================
         // must be in bouds --------------------------
-        if (col < 0 || col > n || row < 0 || row > m){
+        if (col < 0 || col >= n || row < 0 || row > m){
             printf("Out of bounds.\n");
         }
         // Cannot block the door--------------------------
@@ -597,6 +662,38 @@ void cleanMatrix(int m, int n, int**ptr){
 }
     // -------------------------------------------------
 
+void updateMatrix(int roomNum,int **CurrRoomMatrix)
+{
+    FILE *fptr;
+    int m, n; // read them for each room
+    int current = 1;
+
+    //updating file
+    if ((fptr = fopen("factory.bin", "r+b"))== NULL) 
+    {printf("Error - verify file path or permissions \n"); return;}
+
+    // Loop through all stored rooms
+    while (fread(&m, sizeof(int), 1, fptr) == 1 &&
+           fread(&n, sizeof(int), 1, fptr) == 1)
+    {     
+        if (current == roomNum)
+        {
+
+            fseek(fptr, 0, SEEK_CUR); // put at right pos
+
+            for (int i = 0; i < m; i++)
+                fwrite(CurrRoomMatrix[i], sizeof(int), n, fptr);
+
+            printf("Updated successfully\n");
+            fclose(fptr);
+            return;
+        }
+        fseek(fptr, (long)m * n * sizeof(int), SEEK_CUR); //skip to realign the bytes
+        current +=1;
+    }
+
+    fclose(fptr);
+}
 
 //WORKING ON IT ========================================================================================================================
 
