@@ -16,5 +16,5 @@ Row = y = m
   - 2 == Door  
   - room machine file is only created when machine are input in room - if user choose to reset every room file wiil also be deleted  
   
-Machines  
+Machines
 -- Machine cannot block paths to the door - so be extra careful to not call create machine when the room is full - else infinite loop of no more space - check display room before   
