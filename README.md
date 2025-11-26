@@ -1,7 +1,7 @@
 # AdvancedC_Project_25040201
 
 Menu 
-I choose to let my notes at the beginning of menu for the teacher to see the project construstion steps 
+-- I choose to let my notes at the beginning of menu for the teacher to see the project construstion steps 
 User can choose wether to start a new factory (0 = reset) or continue on the old one - careful if reset - no way of recuperating the old data 
 - In the menu - choose to create a room before anything - else the programm will ask you a room and there will be no match - just an infinite question - "this room is not available - please try again"
 - to verify if a room is already created or not - choose "display all room "
